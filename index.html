@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>멍때리기</title>
+<title>빵 터짐</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
@@ -20,56 +20,50 @@
     overflow: hidden;
     border-radius: 18px;
     background: #000;
-    box-shadow: 0 20px 80px rgba(80, 90, 255, .15);
+    box-shadow: 0 20px 80px rgba(255, 170, 60, .18);
     touch-action: manipulation;
+    user-select: none; -webkit-user-select: none;
   }
   /* 세로 화면(폰)에서는 화면을 꽉 채움 */
   @media (max-aspect-ratio: 1/1) {
     .stage { width: 100vw; height: 100dvh; aspect-ratio: auto; border-radius: 0; }
   }
   .stage:fullscreen { border-radius: 0; box-shadow: none; }
-  canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; transition: opacity .7s ease; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 
   .ui { position: absolute; inset: 0; pointer-events: none; transition: opacity .6s ease; }
   .ui.hide { opacity: 0; }
   .title {
     position: absolute; left: clamp(14px, 3vw, 32px); top: clamp(12px, 2.5vw, 28px);
-    text-shadow: 0 2px 12px rgba(0,0,0,.5);
+    text-shadow: 0 2px 12px rgba(0,0,0,.35);
   }
-  .title b { display: block; font-size: clamp(15px, 2.4vw, 26px); font-weight: 700; letter-spacing: -.02em; }
-  .title span { display: block; margin-top: 4px; font-size: clamp(11px, 1.4vw, 15px); opacity: .75; }
+  .title b { display: block; font-size: clamp(15px, 2.4vw, 26px); font-weight: 800; letter-spacing: -.02em; }
+  .title span { display: block; margin-top: 4px; font-size: clamp(11px, 1.4vw, 15px); opacity: .85; }
   .bar {
     position: absolute; left: 50%; bottom: clamp(12px, 3vw, 28px); transform: translateX(-50%);
     display: flex; gap: 8px; padding: 8px; border-radius: 999px;
-    background: rgba(10, 12, 28, .45); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-    border: 1px solid rgba(255,255,255,.14); pointer-events: auto;
+    background: rgba(20, 10, 30, .35); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,.2); pointer-events: auto;
   }
   .bar button {
     appearance: none; border: 0; cursor: pointer; color: #fff; font: inherit;
     font-size: clamp(12px, 1.5vw, 15px); padding: 9px 16px; border-radius: 999px;
-    background: rgba(255,255,255,.1); min-height: 40px; white-space: nowrap;
+    background: rgba(255,255,255,.14); min-height: 40px; white-space: nowrap;
     transition: background .2s;
   }
-  .bar button:hover, .bar button:focus-visible { background: rgba(255,255,255,.25); outline: none; }
-  .bar button[aria-pressed="false"] { opacity: .55; }
-  .progress {
-    position: absolute; left: 0; bottom: 0; height: 3px; width: 100%;
-    background: linear-gradient(90deg, #7aa7ff, #ff8ad8); transform-origin: left; transform: scaleX(0); opacity: .7;
-  }
+  .bar button:hover, .bar button:focus-visible { background: rgba(255,255,255,.3); outline: none; }
 </style>
 </head>
 <body>
 <main class="stage" id="stage">
   <canvas id="c"></canvas>
   <div class="ui" id="ui">
-    <div class="title"><b id="name"></b><span id="msg"></span></div>
+    <div class="title"><b>빵 터짐</b><span>이유는 모르겠지만 일단 웃어요 · 화면을 누르면 펑!</span></div>
     <div class="bar">
-      <button id="next" type="button">다음 장면 ▶</button>
-      <button id="auto" type="button" aria-pressed="true">자동 전환</button>
+      <button id="boom" type="button">💥 한 번 더 펑</button>
       <button id="full" type="button">전체화면</button>
     </div>
   </div>
-  <div class="progress" id="prog"></div>
 </main>
 
 <script>
@@ -79,321 +73,218 @@
   const cv = document.getElementById('c');
   const ctx = cv.getContext('2d');
   const ui = document.getElementById('ui');
-  const nameEl = document.getElementById('name');
-  const msgEl = document.getElementById('msg');
-  const prog = document.getElementById('prog');
-  const autoBtn = document.getElementById('auto');
 
   const TAU = Math.PI * 2;
   const rnd = (a, b) => a + Math.random() * (b - a);
   const pick = arr => arr[(Math.random() * arr.length) | 0];
   const hsla = (h, s, l, a = 1) => `hsla(${((h % 360) + 360) % 360},${s}%,${l}%,${a})`;
-  const smooth = x => x * x * (3 - 2 * x);
-
   let W = 0, H = 0, dpr = 1;
 
-  function glow(x, y, r, color0, color1 = 'rgba(0,0,0,0)') {
-    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
-    g.addColorStop(0, color0); g.addColorStop(1, color1);
-    ctx.fillStyle = g;
-    ctx.fillRect(x - r, y - r, r * 2, r * 2);
-  }
-  function vgrad(c0, c1, c2) {
-    const g = ctx.createLinearGradient(0, 0, 0, H);
-    g.addColorStop(0, c0); if (c2) g.addColorStop(.5, c1); g.addColorStop(1, c2 || c1);
-    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-  }
+  /* ───────── 재료 ───────── */
+  const EF = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
+  // 자주 나오는 웃음 이모지
+  const LAUGH = ['😂', '🤣', '😆', '😹', '😄', '😁', '😝', '🤪', '😅', '😀', '😃', '😸', '😺', '🤭', '😜', '😛',
+    '🥲', '😭', '💀', '☠️', '🤡', '🗿', '🙈', '🙉', '🙊', '🐵', '🫢', '😏', '🤗', '🥳', '🤩', '😋', '😊', '😇'];
+  // 가끔 섞이는 이모지 (밈·동물·파티·손짓)
+  const EXTRA = ['🙃', '🤯', '😎', '🤠', '🥸', '😬', '🫠', '😻', '👻', '👽', '🤖', '🎃', '💩',
+    '🐒', '🦍', '🐶', '🐱', '🐸', '🐷', '🐧', '🦆', '🦄', '🐔', '🐼', '🐨', '🦥', '🐹', '🐰', '🦊', '🐻', '🐙', '🦭',
+    '👏', '🙌', '🤙', '👍', '✌️', '🤘', '🫶', '👌', '💃', '🕺', '🤹', '🎉', '🎊', '🎈', '🥁', '📣', '💥', '✨', '🌈',
+    '⭐', '💯', '🔥', '🍌', '🍕', '🌮', '🍩', '🍿'];
+  const COMBO = ['😂😂😂', '🤣🤣🤣', '😆😆', '💀💀💀', '😹😹', '🤣😂🤣', '🙈🙉🙊', '👏👏👏', '😭😂', '🎉🥳🎉'];
+  const TEXT = ['ㅋㅋㅋㅋ', 'ㅋㅋㅋ', 'ㅋㅋㅋㅋㅋㅋㅋ', 'ㅎㅎㅎ', '푸하하', '꺄르르', '크크크', '캬캬캬', '깔깔깔', '낄낄',
+    '헤헤', '빵!', '웃참실패', '개웃김', '아 ㅋㅋ', 'ㅋㅋ 미쳤다', 'LOL', 'LMAO', 'ROFL', 'HAHAHA', 'hahaha', 'XD',
+    '哈哈哈', '笑死', 'www', '草', '555', 'jajaja', 'kkkkk', 'mdr', 'ahahah'];
+  const KAO = ['(≧▽≦)', '٩(^ᴗ^)۶', '(ノ´▽`)ノ', '( ͡° ͜ʖ ͡°)', '(^o^)/', '(*´▽`*)', 'ʕ•ᴥ•ʔ', '(☆▽☆)',
+    '╰(*°▽°*)╯', '(๑>◡<๑)', 'ヽ(≧◡≦)ノ', '(≧∇≦)b', '(^▽^)', '＼(^o^)／'];
+  const CAPS = ['웃참 실패', 'ㅋㅋㅋㅋ', '아 배 아파', '지금 내 상태', '이걸 참네', 'LOL', '숨 못 쉬는 중',
+    '광대 승천', '개웃겨', '와 미쳤다', '현웃 터짐', '눈물 남'];
+  const MODES = ['burst', 'rain', 'pop', 'bounce', 'rise'];
+  const RATE = { burst: .55, rain: .09, pop: .14, bounce: .6, rise: .13 };
 
-  /* ───────── 장면들 ───────── */
-  const scenes = [];
+  let items = [], rings = [], conf = [], mode, modeT, modeDur, acc = 0, shake = 0;
 
-  // 1. 오로라
-  scenes.push((() => {
-    let blobs;
-    return {
-      name: '오로라', msg: '색이 천천히 번지는 걸 구경해요',
-      init() {
-        blobs = Array.from({ length: 7 }, (_, i) => ({
-          p1: rnd(0, TAU), p2: rnd(0, TAU), s1: rnd(.05, .14), s2: rnd(.05, .14),
-          hue: 180 + i * 28, r: rnd(.3, .5)
-        }));
-      },
-      draw(t) {
-        ctx.globalCompositeOperation = 'source-over';
-        ctx.fillStyle = '#060a1c'; ctx.fillRect(0, 0, W, H);
-        ctx.globalCompositeOperation = 'lighter';
-        const m = Math.max(W, H);
-        for (const b of blobs) {
-          const x = W * (.5 + .42 * Math.sin(t * b.s1 + b.p1));
-          const y = H * (.5 + .4 * Math.cos(t * b.s2 + b.p2));
-          glow(x, y, m * b.r, hsla(b.hue + t * 5, 85, 55, .5));
-        }
-        ctx.globalCompositeOperation = 'source-over';
-      }
-    };
-  })());
+  const back = x => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); };
+  const rr = (x, y, w, h, r) => {
+    ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+  };
 
-  // 2. 몽글몽글 방울
-  scenes.push((() => {
-    let bs;
-    const mk = (fromBottom) => ({
-      x: rnd(0, W), y: fromBottom ? H + rnd(20, 200) : rnd(0, H),
-      r: rnd(.015, .07) * Math.min(W, H) + 6, vy: rnd(14, 46), ph: rnd(0, TAU), hue: rnd(170, 330)
-    });
-    return {
-      name: '방울방울', msg: '둥실둥실 떠오르는 방울',
-      init() { bs = Array.from({ length: Math.round(Math.min(60, Math.max(24, W / 22))) }, () => mk(false)); },
-      draw(t, dt) {
-        vgrad('#1b1245', '#33206b', '#0f4c75');
-        for (const b of bs) {
-          b.y -= b.vy * dt * (1 + b.r / 80);
-          if (b.y < -b.r * 2) Object.assign(b, mk(true));
-          const x = b.x + Math.sin(t * .8 + b.ph) * b.r * .9;
-          ctx.beginPath(); ctx.arc(x, b.y, b.r, 0, TAU);
-          const g = ctx.createRadialGradient(x - b.r * .35, b.y - b.r * .35, b.r * .1, x, b.y, b.r);
-          g.addColorStop(0, hsla(b.hue, 90, 85, .55)); g.addColorStop(1, hsla(b.hue, 90, 60, .12));
-          ctx.fillStyle = g; ctx.fill();
-          ctx.strokeStyle = hsla(b.hue, 90, 85, .45); ctx.lineWidth = 1.5; ctx.stroke();
-        }
-      }
-    };
-  })());
-
-  // 3. 숨쉬기
-  scenes.push({
-    name: '심호흡', msg: '원이 커질 때 들이마시고, 작아질 때 내쉬어요',
-    init() {},
-    draw(t) {
-      vgrad('#05222b', '#0a3d47', '#082a3a');
-      const cyc = 12, k = t % cyc;
-      let s, label;
-      if (k < 4) { s = smooth(k / 4); label = '들이마시고'; }
-      else if (k < 6) { s = 1; label = '잠깐 멈추고'; }
-      else { s = 1 - smooth((k - 6) / 6); label = '천천히 내쉬고'; }
-      const base = Math.min(W, H) * .36, cx = W / 2, cy = H / 2;
-      const r = base * (.35 + .65 * s);
-      ctx.globalCompositeOperation = 'lighter';
-      glow(cx, cy, r * 2.2, `rgba(80,220,200,${.18 + .2 * s})`);
-      for (let i = 0; i < 5; i++) {
-        const rr = r * (1 - i * .16);
-        ctx.beginPath(); ctx.arc(cx, cy, rr, 0, TAU);
-        ctx.fillStyle = hsla(165 + i * 14, 70, 55, .08 + .03 * i); ctx.fill();
-        ctx.strokeStyle = hsla(170 + i * 14, 80, 75, .25); ctx.lineWidth = 2; ctx.stroke();
-      }
-      ctx.globalCompositeOperation = 'source-over';
-      ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.font = `500 ${Math.max(14, Math.min(W, H) * .05)}px "Malgun Gothic", sans-serif`;
-      ctx.fillText(label, cx, cy);
+  // 직접 그린 '눈물 나게 웃는 얼굴' (OS 이모지와 상관없이 항상 같은 모양, 입이 계속 움직임)
+  function drawFace(r, t, ph) {
+    const g = ctx.createRadialGradient(-r * .3, -r * .3, r * .1, 0, 0, r);
+    g.addColorStop(0, '#ffec8f'); g.addColorStop(1, '#ffb52e');
+    ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.fillStyle = g; ctx.fill();
+    ctx.lineWidth = r * .05; ctx.strokeStyle = '#c77a0a'; ctx.stroke();
+    ctx.fillStyle = 'rgba(255,90,110,.3)';
+    for (const s of [-1, 1]) { ctx.beginPath(); ctx.ellipse(s * r * .62, r * .18, r * .17, r * .1, 0, 0, TAU); ctx.fill(); }
+    ctx.strokeStyle = '#4a2a00'; ctx.lineWidth = r * .09; ctx.lineCap = 'round';
+    for (const s of [-1, 1]) { ctx.beginPath(); ctx.arc(s * r * .38, -r * .18, r * .17, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke(); }
+    const open = .5 + .5 * Math.sin(t * 14 + ph), top = r * .1, bot = top + r * (.3 + .55 * open);
+    ctx.save();
+    ctx.beginPath(); ctx.moveTo(-r * .56, top); ctx.lineTo(r * .56, top);
+    ctx.bezierCurveTo(r * .5, bot, -r * .5, bot, -r * .56, top); ctx.closePath();
+    ctx.fillStyle = '#6b1d0a'; ctx.fill(); ctx.clip();
+    ctx.fillStyle = '#fff'; ctx.fillRect(-r * .6, top, r * 1.2, r * .13);
+    ctx.fillStyle = '#ff6b81'; ctx.beginPath(); ctx.ellipse(0, bot, r * .3, r * .2, 0, 0, TAU); ctx.fill();
+    ctx.restore();
+    for (const s of [-1, 1]) for (let k = 0; k < 2; k++) {
+      const f = (t * 1.6 + ph + k * .5) % 1;
+      ctx.beginPath(); ctx.ellipse(s * (r * .5 + r * .45 * f), -r * .02 + r * .35 * f, r * .07, r * .1, 0, 0, TAU);
+      ctx.fillStyle = `rgba(90,200,255,${1 - f})`; ctx.fill();
     }
-  });
+  }
 
-  // 4. 빗소리 없는 비
-  scenes.push((() => {
-    let drops, ripples, acc;
-    return {
-      name: '비 오는 날', msg: '창밖에 내리는 비를 바라봐요',
-      init() { drops = []; ripples = []; acc = 0; },
-      draw(t, dt) {
-        vgrad('#0d1423', '#1a2740', '#243553');
-        acc += dt * W / 9;
-        while (acc > 1) {
-          acc--;
-          drops.push({ x: rnd(0, W), y: -20, vy: rnd(.7, 1.3) * H * 1.1, ty: rnd(H * .45, H * .97), len: rnd(.03, .07) * H });
-        }
-        ctx.lineCap = 'round';
-        for (let i = drops.length - 1; i >= 0; i--) {
-          const d = drops[i]; d.y += d.vy * dt;
-          if (d.y >= d.ty) { ripples.push({ x: d.x, y: d.ty, r: 0, a: .7 }); drops.splice(i, 1); continue; }
-          ctx.strokeStyle = 'rgba(180,205,255,.5)'; ctx.lineWidth = 1.5;
-          ctx.beginPath(); ctx.moveTo(d.x, d.y - d.len); ctx.lineTo(d.x, d.y); ctx.stroke();
-        }
-        for (let i = ripples.length - 1; i >= 0; i--) {
-          const p = ripples[i]; p.r += dt * H * .12; p.a -= dt * .6;
-          if (p.a <= 0) { ripples.splice(i, 1); continue; }
-          ctx.strokeStyle = `rgba(190,215,255,${p.a})`; ctx.lineWidth = 1.5;
-          ctx.beginPath(); ctx.ellipse(p.x, p.y, p.r, p.r * .32, 0, 0, TAU); ctx.stroke();
-        }
-      }
-    };
-  })());
-
-  // 5. 반딧불
-  scenes.push((() => {
-    let fl;
-    return {
-      name: '반딧불이', msg: '깜빡깜빡, 아무 생각 없이',
-      init() {
-        fl = Array.from({ length: Math.round(Math.min(90, Math.max(35, W / 14))) }, () => ({
-          x: rnd(0, W), y: rnd(0, H), a: rnd(0, TAU), sp: rnd(12, 34), ph: rnd(0, TAU),
-          r: rnd(.012, .03) * Math.min(W, H) + 5, hue: rnd(55, 110)
-        }));
-      },
-      draw(t, dt) {
-        vgrad('#030a07', '#07160f', '#0a2118');
-        ctx.globalCompositeOperation = 'lighter';
-        for (const f of fl) {
-          f.a += Math.sin(t * .6 + f.ph) * dt * 2.2;
-          f.x += Math.cos(f.a) * f.sp * dt; f.y += Math.sin(f.a) * f.sp * dt;
-          if (f.x < -30) f.x = W + 30; if (f.x > W + 30) f.x = -30;
-          if (f.y < -30) f.y = H + 30; if (f.y > H + 30) f.y = -30;
-          const b = Math.pow(.5 + .5 * Math.sin(t * 1.3 + f.ph * 2), 2);
-          glow(f.x, f.y, f.r * 3.2, hsla(f.hue, 95, 60, .08 + .6 * b));
-          glow(f.x, f.y, f.r * .7, hsla(f.hue, 100, 85, .2 + .8 * b));
-        }
-        ctx.globalCompositeOperation = 'source-over';
-      }
-    };
-  })());
-
-  // 6. 빵 터짐
-  scenes.push((() => {
-    const faces = ['😂', '🤣', '😆', '😹', '😄', '😁', '🥹', '😝', '🤪'];
-    const kk = ['ㅋㅋㅋ', 'ㅋㅋㅋㅋㅋ', 'ㅎㅎㅎ', 'ㅋㅋㅋㅋ', 'ㅋㅋ', '푸하하', '하하하'];
-    let items, acc;
-    const spawn = () => {
-      const isText = Math.random() < .25, m = Math.min(W, H);
-      items.push({
-        txt: isText ? pick(kk) : pick(faces), text: isText,
-        x: rnd(.08, .92) * W, y: rnd(.12, .88) * H, size: rnd(.12, .3) * m * (isText ? .6 : 1) + 18,
-        rot: rnd(-.4, .4), life: 0, dur: rnd(1.8, 3), hue: rnd(0, 360), sh: rnd(18, 34)
-      });
-    };
-    const back = x => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); };
-    return {
-      name: '빵 터짐', msg: '이유는 모르겠지만 일단 웃어요',
-      init() { items = []; acc = 0; for (let i = 0; i < 6; i++) { spawn(); items[i].life = rnd(0, 1.2); } },
-      draw(t, dt) {
-        const h = 40 + 25 * Math.sin(t * .15);
-        const g = ctx.createLinearGradient(0, 0, W, H);
-        g.addColorStop(0, hsla(h, 95, 62)); g.addColorStop(1, hsla(h + 40, 95, 58));
-        ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-        acc += dt;
-        while (acc > .22) { acc -= .22; if (items.length < 28) spawn(); }
-        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        for (let i = items.length - 1; i >= 0; i--) {
-          const o = items[i]; o.life += dt;
-          if (o.life > o.dur) { items.splice(i, 1); continue; }
-          const inn = back(Math.min(1, o.life / .4));
-          const out = o.life > o.dur - .4 ? (o.dur - o.life) / .4 : 1;
-          const sc = inn * out;
-          ctx.save();
-          ctx.translate(o.x, o.y + Math.sin(o.life * 6) * 4);
-          ctx.rotate(o.rot + Math.sin(o.life * o.sh) * .14);
-          ctx.scale(sc, sc);
-          if (o.text) {
-            ctx.font = `800 ${o.size}px "Malgun Gothic", sans-serif`;
-            ctx.lineWidth = o.size * .12; ctx.strokeStyle = 'rgba(255,255,255,.95)'; ctx.lineJoin = 'round';
-            ctx.strokeText(o.txt, 0, 0);
-            ctx.fillStyle = hsla(o.hue + 200, 85, 45); ctx.fillText(o.txt, 0, 0);
-          } else {
-            ctx.font = `${o.size}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
-            ctx.fillText(o.txt, 0, 0);
-          }
-          ctx.restore();
-        }
-      }
-    };
-  })());
-
-  // 7. 리사주 곡선
-  scenes.push((() => {
-    let last;
-    return {
-      name: '빛의 궤적', msg: '선이 그려지는 모양을 따라가요',
-      init() { last = null; ctx.fillStyle = '#07051a'; ctx.fillRect(0, 0, W, H); },
-      draw(t, dt) {
-        ctx.globalCompositeOperation = 'source-over';
-        ctx.fillStyle = 'rgba(7,5,26,.06)'; ctx.fillRect(0, 0, W, H);
-        ctx.globalCompositeOperation = 'lighter';
-        ctx.lineCap = 'round'; ctx.lineWidth = Math.max(1.5, Math.min(W, H) * .004);
-        const A = W * .38, B = H * .38, steps = 8, d = t * .12;
-        if (!last) last = [0, 1, 2].map(() => null);
-        for (let i = 0; i < steps; i++) {
-          const u = (t - dt + dt * i / steps) * 1.1;
-          for (let k = 0; k < 3; k++) {
-            const x = W / 2 + A * Math.sin(3 * u + d + k * .35);
-            const y = H / 2 + B * Math.sin(2 * u + k * .2 + Math.sin(t * .1));
-            if (last[k]) {
-              ctx.strokeStyle = hsla(t * 25 + k * 70, 90, 62, .9);
-              ctx.beginPath(); ctx.moveTo(last[k][0], last[k][1]); ctx.lineTo(x, y); ctx.stroke();
-            }
-            last[k] = [x, y];
-          }
-        }
-        ctx.globalCompositeOperation = 'source-over';
-      }
-    };
-  })());
-
-  // 8. 노을 물결
-  scenes.push({
-    name: '노을 물결', msg: '파도가 오가는 걸 가만히',
-    init() {},
-    draw(t) {
-      vgrad('#2a1458', '#c2477a', '#ffb36b');
-      const sy = H * .5 + Math.sin(t * .08) * H * .02;
-      glow(W / 2, sy, Math.min(W, H) * .45, 'rgba(255,240,200,.9)', 'rgba(255,180,120,0)');
-      for (let i = 0; i < 6; i++) {
-        const base = H * (.52 + i * .09), amp = H * (.012 + i * .006), sp = .35 + i * .1;
-        ctx.beginPath(); ctx.moveTo(0, H);
-        for (let x = 0; x <= W + 8; x += 8) {
-          const y = base + Math.sin(x / W * 5 + t * sp + i) * amp + Math.sin(x / W * 11 - t * sp * 1.3 + i * 2) * amp * .5;
-          ctx.lineTo(x, y);
-        }
-        ctx.lineTo(W, H); ctx.closePath();
-        ctx.fillStyle = hsla(255 - i * 8, 55 - i * 3, 30 - i * 3.5, .55 + i * .08); ctx.fill();
-      }
+  const content = () => {
+    const r = Math.random(), base = rnd(.11, .27) * Math.min(W, H) + 22;
+    if (r < .38) return { type: 'emoji', txt: pick(LAUGH), size: base };
+    if (r < .55) return { type: 'emoji', txt: pick(EXTRA), size: base * .9 };
+    if (r < .62) return { type: 'emoji', txt: pick(COMBO), size: base * .5 };
+    if (r < .73) return { type: 'face', size: base * 1.05, ph: rnd(0, TAU) };
+    if (r < .88) return { type: 'text', txt: pick(TEXT), size: base * .6, hue: rnd(0, 360) };
+    if (r < .93) return { type: 'kao', txt: pick(KAO), size: base * .5, hue: rnd(0, 360) };
+    return { type: 'card', cap: pick(CAPS), size: base * 1.1, ph: rnd(0, TAU) };
+  };
+  const spawn = (x, y, vx, vy, o = {}) => {
+    if (items.length > 90) return;
+    items.push(Object.assign(content(), {
+      x, y, vx, vy, g: 0, rot: rnd(-.4, .4), vr: rnd(-1.5, 1.5), life: 0, dur: rnd(2, 3),
+      sh: rnd(14, 30), sw: 0, ph2: rnd(0, TAU), bw: false, bt: false, damp: .8, off: false
+    }, o));
+  };
+  const spawnBounce = () => {
+    const sp = Math.min(W, H) * rnd(.25, .55), a = rnd(0, TAU);
+    spawn(rnd(.1, .9) * W, rnd(.1, .9) * H, Math.cos(a) * sp, Math.sin(a) * sp, { bw: true, bt: true, dur: rnd(8, 12), damp: 1, vr: rnd(-2, 2) });
+  };
+  const burst = (bx, by) => {
+    const m = Math.min(W, H), cx = bx ?? W / 2, cy = by ?? H * .6;
+    for (let i = 0; i < 8; i++) {
+      const a = rnd(-Math.PI * .95, -Math.PI * .05), sp = m * rnd(.6, 1.3);
+      spawn(cx, cy, Math.cos(a) * sp * 1.2, Math.sin(a) * sp, { g: m * 1.5, bw: true, damp: .82, dur: rnd(3.5, 5), vr: rnd(-4, 4) });
     }
-  });
+    rings.push({ x: cx, y: cy, r: 0, a: .9 });
+    shake = m * .025;
+    for (let i = 0; i < 36 && conf.length < 180; i++) {
+      const a = rnd(-Math.PI, 0), sp = m * rnd(.4, 1.1);
+      conf.push({ x: cx, y: cy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, rot: rnd(0, TAU), vr: rnd(-8, 8), hue: rnd(0, 360), life: 0 });
+    }
+  };
+  const doSpawn = () => {
+    const m = Math.min(W, H);
+    if (mode === 'burst') burst();
+    else if (mode === 'rain') spawn(rnd(0, W), -m * .3, rnd(-.03, .03) * W, H * rnd(.3, .6), { dur: 99, off: true, sw: rnd(1, 3) });
+    else if (mode === 'rise') spawn(rnd(0, W), H + m * .3, rnd(-.02, .02) * W, -H * rnd(.2, .45), { dur: 99, off: true, sw: rnd(1, 3) });
+    else if (mode === 'pop') spawn(rnd(.08, .92) * W, rnd(.1, .9) * H, 0, 0, { dur: rnd(1.4, 2.4) });
+    else if (items.length < 28) spawnBounce();
+  };
+  // 7~11초마다 터지는 방식이 바뀌며 끝없이 반복
+  const setMode = m => {
+    mode = m; modeT = 0; modeDur = rnd(7, 11); acc = 0;
+    if (m === 'bounce') for (let i = 0; i < 10; i++) spawnBounce();
+  };
+
+  function draw(t, dt) {
+    const m = Math.min(W, H), hh = t * 14;
+    const bg = ctx.createLinearGradient(0, 0, W, H);
+    bg.addColorStop(0, hsla(hh + 20, 92, 62)); bg.addColorStop(1, hsla(hh + 80, 92, 56));
+    ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+
+    modeT += dt;
+    if (modeT > modeDur) { let n; do { n = pick(MODES); } while (n === mode); setMode(n); }
+    acc += dt;
+    while (acc > RATE[mode]) { acc -= RATE[mode]; doSpawn(); }
+
+    shake *= Math.exp(-dt * 6);
+    ctx.save();
+    ctx.translate(rnd(-1, 1) * shake, rnd(-1, 1) * shake);
+
+    for (let i = rings.length - 1; i >= 0; i--) {
+      const p = rings[i]; p.r += dt * m * 1.6; p.a -= dt * 1.6;
+      if (p.a <= 0) { rings.splice(i, 1); continue; }
+      ctx.strokeStyle = `rgba(255,255,255,${p.a})`; ctx.lineWidth = m * .012;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, TAU); ctx.stroke();
+    }
+
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+    for (let i = items.length - 1; i >= 0; i--) {
+      const o = items[i];
+      o.life += dt; o.x += o.vx * dt; o.y += o.vy * dt; o.vy += o.g * dt; o.rot += o.vr * dt;
+      const rad = o.size * .45;
+      if (o.bw) {
+        if (o.x < rad) { o.x = rad; o.vx = Math.abs(o.vx) * o.damp; }
+        else if (o.x > W - rad) { o.x = W - rad; o.vx = -Math.abs(o.vx) * o.damp; }
+        if (o.y > H - rad) { o.y = H - rad; o.vy = -Math.abs(o.vy) * o.damp; }
+        if (o.bt && o.y < rad) { o.y = rad; o.vy = Math.abs(o.vy) * o.damp; }
+      }
+      if (o.life > o.dur || (o.off && (o.y > H + o.size * 1.5 || o.y < -o.size * 1.5))) { items.splice(i, 1); continue; }
+      const sc = back(Math.min(1, o.life / .3)) * (o.dur - o.life < .35 ? (o.dur - o.life) / .35 : 1) * (1 + .05 * Math.sin(o.life * o.sh));
+      ctx.save();
+      ctx.translate(o.x + (o.sw ? Math.sin(o.life * o.sw * 2 + o.ph2) * o.size * .18 : 0), o.y);
+      ctx.rotate(o.rot + Math.sin(o.life * o.sh) * .1);
+      ctx.scale(Math.max(0, sc), Math.max(0, sc));
+      if (o.type === 'emoji') {
+        ctx.font = `${o.size}px ${EF}`; ctx.fillText(o.txt, 0, 0);
+      } else if (o.type === 'face') {
+        drawFace(o.size * .5, o.life, o.ph);
+      } else if (o.type === 'text' || o.type === 'kao') {
+        ctx.font = `800 ${o.size}px "Malgun Gothic","Segoe UI Symbol",sans-serif`;
+        ctx.lineWidth = o.size * .14; ctx.strokeStyle = 'rgba(255,255,255,.96)'; ctx.strokeText(o.txt, 0, 0);
+        ctx.fillStyle = hsla(o.hue + 200, 85, 42); ctx.fillText(o.txt, 0, 0);
+      } else {
+        const w = o.size * 1.5, h = o.size * 1.35;
+        ctx.shadowColor = 'rgba(0,0,0,.3)'; ctx.shadowBlur = 14; ctx.shadowOffsetY = 6;
+        rr(-w / 2, -h / 2, w, h, w * .08); ctx.fillStyle = '#fff'; ctx.fill();
+        ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+        ctx.save(); ctx.translate(0, -h * .1); drawFace(w * .3, o.life, o.ph); ctx.restore();
+        ctx.fillStyle = '#111'; ctx.font = `800 ${w * .11}px "Malgun Gothic",sans-serif`;
+        ctx.fillText(o.cap, 0, h * .36, w * .9);
+      }
+      ctx.restore();
+    }
+
+    for (let i = conf.length - 1; i >= 0; i--) {
+      const c = conf[i]; c.life += dt; c.x += c.vx * dt; c.y += c.vy * dt; c.vy += m * dt; c.rot += c.vr * dt;
+      if (c.life > 2.2) { conf.splice(i, 1); continue; }
+      ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(c.rot);
+      ctx.fillStyle = hsla(c.hue, 95, 55, 1 - c.life / 2.2);
+      ctx.fillRect(-m * .008, -m * .005, m * .016, m * .01); ctx.restore();
+    }
+    ctx.restore();
+  }
 
   /* ───────── 엔진 ───────── */
-  const INTERVAL = 28; // 초
-  let cur = -1, scene = null, auto = true, elapsed = 0, switching = false, last = performance.now(), t0 = last;
+  let last = performance.now();
+  const t0 = last;
 
+  function reset() {
+    items = []; rings = []; conf = []; shake = 0;
+    setMode('burst');
+    for (let i = 0; i < 6; i++) spawn(rnd(.1, .9) * W, rnd(.1, .9) * H, 0, 0, { life: rnd(0, 1) });
+  }
   function resize() {
     const r = stage.getBoundingClientRect();
     dpr = Math.min(window.devicePixelRatio || 1, 2);
     W = Math.max(1, Math.round(r.width)); H = Math.max(1, Math.round(r.height));
     cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    if (scene) scene.init();
+    reset();
   }
-
-  function setScene(i) {
-    cur = i; scene = scenes[i];
-    nameEl.textContent = scene.name; msgEl.textContent = scene.msg;
-    scene.init(); elapsed = 0;
-  }
-
-  function nextScene() {
-    if (switching) return;
-    switching = true; cv.style.opacity = 0;
-    setTimeout(() => {
-      let n; do { n = (Math.random() * scenes.length) | 0; } while (n === cur && scenes.length > 1);
-      setScene(n); cv.style.opacity = 1; switching = false;
-    }, 700);
-  }
-
   function frame(now) {
     const dt = Math.min(.05, (now - last) / 1000); last = now;
-    if (auto && !switching) {
-      elapsed += dt;
-      if (elapsed >= INTERVAL) nextScene();
-    }
-    prog.style.transform = `scaleX(${auto ? Math.min(1, elapsed / INTERVAL) : 0})`;
-    if (scene) scene.draw((now - t0) / 1000, dt);
+    draw((now - t0) / 1000, dt);
     requestAnimationFrame(frame);
   }
 
-  // UI: 가만히 있으면 컨트롤 숨김
+  // 가만히 있으면 버튼 숨김
   let hideTimer;
   const showUi = () => { ui.classList.remove('hide'); clearTimeout(hideTimer); hideTimer = setTimeout(() => ui.classList.add('hide'), 3500); };
   ['pointermove', 'pointerdown', 'keydown'].forEach(e => window.addEventListener(e, showUi, { passive: true }));
 
-  document.getElementById('next').addEventListener('click', nextScene);
-  autoBtn.addEventListener('click', () => {
-    auto = !auto; autoBtn.setAttribute('aria-pressed', String(auto)); elapsed = 0;
+  stage.addEventListener('pointerdown', e => {
+    if (e.target.closest('.bar')) return;
+    const r = stage.getBoundingClientRect();
+    burst(e.clientX - r.left, e.clientY - r.top);
   });
+  document.getElementById('boom').addEventListener('click', () => burst());
   document.getElementById('full').addEventListener('click', () => {
     try {
       if (document.fullscreenElement) document.exitFullscreen();
@@ -401,13 +292,12 @@
     } catch (e) { /* 전체화면 미지원 환경 */ }
   });
   window.addEventListener('keydown', e => {
-    if (e.code === 'Space' || e.code === 'ArrowRight') { e.preventDefault(); nextScene(); }
+    if (e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); burst(); }
     else if (e.key === 'f' || e.key === 'F') document.getElementById('full').click();
   });
 
   new ResizeObserver(resize).observe(stage);
   resize();
-  setScene((Math.random() * scenes.length) | 0);
   showUi();
   requestAnimationFrame(frame);
 })();
